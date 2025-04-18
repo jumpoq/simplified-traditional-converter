@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简体繁体转换工具 (OpenCC-JS)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/opencc-js@1.0.5/dist/umd/full.js" defer></script>
+    <style>
+        /* 自定义样式 */
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            /* 防止body滚动 */
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            /* 应用 Inter 字体 */
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 移除高亮样式 .converted-char */
+
+        /* 统一输入/输出区域样式 */
+        .text-area-common {
+            width: 100%;
+            height: 100%;
+            /* 占据父容器所有高度 */
+            padding: 0.75rem;
+            /* p-3 */
+            border: 1px solid #E2E8F0;
+            /* border-gray-300 */
+            border-radius: 0.375rem;
+            /* rounded-md */
+            transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+            font-size: 0.875rem;
+            /* text-sm */
+            line-height: 1.25rem;
+            color: #374151;
+            /* text-gray-700 */
+            background-color: #F9FAFB;
+            /* bg-gray-50 */
+            resize: none;
+            overflow-y: auto;
+            /* 内部滚动 */
+            white-space: pre-wrap;
+            /* 保留换行和空格 */
+            word-break: break-word;
+            /* 单词换行 */
+        }
+
+        .text-area-common:focus,
+        .text-area-common:focus-within {
+            /* :focus-within 用于 div */
+            outline: 2px solid transparent;
+            outline-offset: 2px;
+            border-color: #3B82F6;
+            /* focus:border-blue-500 */
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+            /* focus:ring-2 focus:ring-blue-500 */
+        }
+
+        /* 隐藏滚动条但保留滚动功能 (可选) */
+        .text-area-common::-webkit-scrollbar {
+            display: none;
+            /* Chrome, Safari, Opera */
+        }
+
+        .text-area-common {
+            -ms-overflow-style: none;
+            /* IE and Edge */
+            scrollbar-width: none;
+            /* Firefox */
+        }
+
+        /* Notion 风格按钮 */
+        .notion-button {
+            background-color: #F7FAFC;
+            /* bg-gray-50 */
+            border: 1px solid #E2E8F0;
+            /* border-gray-300 */
+            color: #4A5568;
+            /* text-gray-700 */
+            transition: background-color 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+            display: inline-flex;
+            /* 用于对齐图标和文字 */
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            /* py-2 px-4 */
+            border-radius: 0.375rem;
+            /* rounded-md */
+            font-weight: 500;
+            /* font-medium */
+            font-size: 0.875rem;
+            /* text-sm */
+            cursor: pointer;
+        }
+
+        .notion-button:hover {
+            background-color: #EDF2F7;
+            /* bg-gray-100 */
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        }
+
+        .notion-button:active {
+            background-color: #E2E8F0;
+            /* bg-gray-200 */
+        }
+
+        .notion-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* 提示消息样式 */
+        .toast {
+            position: fixed;
+            bottom: 6rem;
+            /* 向上移动一点，避免被按钮遮挡 */
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.75rem 1.5rem;
+            background-color: rgba(17, 24, 39, 0.9);
+            /* bg-gray-900 with opacity */
+            color: white;
+            border-radius: 0.5rem;
+            /* rounded-lg */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            /* shadow-md */
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            z-index: 50;
+            pointer-events: none;
+            /* 防止遮挡 */
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 p-4">
+    <div class="flex-grow flex flex-col bg-white rounded-xl shadow-lg w-full max-w-6xl mx-auto overflow-hidden">
+        <h1 class="text-xl md:text-2xl font-semibold text-gray-800 p-4 text-center shrink-0 border-b border-gray-200">
+            简体繁体转换 (OpenCC-JS)
+        </h1>
+
+        <div class="flex-grow grid grid-cols-1 md:grid-cols-2 gap-4 p-4 overflow-y-auto" style="min-height: 0;">
+            <div class="flex flex-col h-full">
+                <label for="inputText" class="block text-sm font-medium text-gray-600 mb-2 shrink-0">输入文本 (自动转换)</label>
+                <div class="flex-grow">
+                    <textarea id="inputText" class="text-area-common" placeholder="在此输入或粘贴简体/繁体文字..."></textarea>
+                </div>
+            </div>
+
+            <div class="flex flex-col h-full">
+                <label for="outputTextLabel" class="block text-sm font-medium text-gray-600 mb-2 shrink-0">转换结果</label>
+                <div class="flex-grow">
+                    <div id="outputText" class="text-area-common" aria-labelledby="outputTextLabel"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="shrink-0 flex justify-center items-center space-x-4 p-3 md:p-4 border-t border-gray-200 bg-gray-50">
+            <button id="pasteButton" class="notion-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+                <span>贴入</span>
+            </button>
+            <button id="copyButton" class="notion-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>复制</span>
+            </button>
+            <button id="clearButton" class="notion-button">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1.5" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                <span>清空</span>
+            </button>
+        </div>
+    </div>
+
+    <div id="toastMessage" class="toast"></div>
+
+    <script>
+        // --- DOM 元素获取 ---
+        const inputTextElem = document.getElementById('inputText');
+        const outputTextElem = document.getElementById('outputText');
+        const pasteButton = document.getElementById('pasteButton');
+        const copyButton = document.getElementById('copyButton');
+        const clearButton = document.getElementById('clearButton');
+        const toastMessageElem = document.getElementById('toastMessage');
+
+        let toastTimeout; // 用于存储提示消息的 Timeout ID
+        let debounceTimeout; // 用于存储防抖的 Timeout ID
+        let opencc = null; // 用于存储 OpenCC 实例
+
+        // --- 初始化 OpenCC ---
+        async function initializeOpenCC() {
+            console.log('Attempting to initialize OpenCC...');
+            try {
+                // 检查 OpenCC 是否已定义
+                if (typeof OpenCC !== 'undefined') {
+
+                    // --- 分步测试初始化 ---
+                    // 1. 尝试基础转换器 (cn <-> t)
+                    console.log('Creating basic cn -> t converter...');
+                    const s2tBasic = await OpenCC.ConverterFactory({ from: 'cn', to: 't' });
+                    console.log('Basic s2t converter created.');
+                    console.log('Creating basic t -> cn converter...');
+                    const t2sBasic = await OpenCC.ConverterFactory({ from: 't', to: 'cn' });
+                    console.log('Basic t2s converter created.');
+
+                    // 2. 尝试带词汇的转换器 (cn <-> twp)
+                    console.log('Creating cn -> twp converter (with phrases)...');
+                    const s2tPhrases = await OpenCC.ConverterFactory({ from: 'cn', to: 'twp' });
+                    console.log('s2twp converter created.');
+                    console.log('Creating twp -> cn converter (with phrases)...');
+                    const t2sPhrases = await OpenCC.ConverterFactory({ from: 'twp', to: 'cn' });
+                    console.log('twp2cn converter created.');
+
+                    // 如果所有步骤都成功，则使用带词汇的转换器
+                    opencc = {
+                        s2tConverter: s2tPhrases,
+                        t2sConverter: t2sPhrases
+                    };
+                    // --- 结束分步测试 ---
+
+                    console.log('OpenCC initialized successfully with phrase conversion.');
+                    enableButtons();
+                } else {
+                    console.error('OpenCC library object not found after script load.');
+                    showToast('转换库对象未找到。请检查控制台错误。');
+                    disableButtons();
+                }
+            } catch (err) {
+                // --- 增强错误日志 ---
+                console.error('Failed to initialize OpenCC during ConverterFactory call:', err);
+                console.error('Error Message:', err ? err.message : 'N/A');
+                console.error('Error Stack:', err ? err.stack : 'N/A');
+                // --- 结束增强错误日志 ---
+                showToast(`转换库初始化失败: ${err ? err.message : '未知错误'}`);
+                disableButtons();
+            }
+        }
+
+        function disableButtons() {
+            pasteButton.disabled = true;
+            copyButton.disabled = true;
+            clearButton.disabled = true;
+            inputTextElem.disabled = true;
+            inputTextElem.placeholder = '转换库加载/初始化失败...';
+        }
+        function enableButtons() {
+            pasteButton.disabled = false;
+            copyButton.disabled = false;
+            clearButton.disabled = false;
+            inputTextElem.disabled = false;
+            inputTextElem.placeholder = '在此输入或粘贴简体/繁体文字...';
+        }
+
+        // --- 功能函数 ---
+        function debounce(func, delay) {
+            return function (...args) {
+                clearTimeout(debounceTimeout);
+                debounceTimeout = setTimeout(() => {
+                    if (!opencc) {
+                        console.warn('OpenCC not initialized yet.');
+                        return;
+                    }
+                    func.apply(this, args);
+                }, delay);
+            };
+        }
+
+        function showToast(message) {
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastMessageElem.textContent = message;
+            toastMessageElem.classList.add('show');
+            toastTimeout = setTimeout(() => {
+                toastMessageElem.classList.remove('show');
+            }, 3000);
+        }
+
+        function copyToClipboard(text, showSuccessToast = true) {
+            if (!text) {
+                showToast('没有内容可复制');
+                return;
+            }
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                    if (showSuccessToast) showToast('已复制到剪贴板');
+                })
+                .catch(err => {
+                    console.error('Clipboard write failed:', err.message || err);
+                    let toastMsg = '复制失败，请手动复制';
+                    if (err.message && err.message.toLowerCase().includes('permissions policy')) {
+                        toastMsg = '复制失败：浏览器权限策略限制。';
+                    } else if (err.message && err.message.toLowerCase().includes('secure context')) {
+                        toastMsg = '复制失败：需要安全环境 (https 或 localhost)。';
+                    }
+                    showToast(toastMsg);
+                });
+        }
+
+        function autoConvert() {
+            // 确保 opencc 和转换器都已正确初始化
+            if (!opencc || !opencc.s2tConverter || !opencc.t2sConverter) {
+                console.warn('OpenCC converters not ready for autoConvert.');
+                return;
+            }
+
+            const inputText = inputTextElem.value;
+            if (!inputText) {
+                outputTextElem.textContent = '';
+                return;
+            }
+
+            let convertedText = '';
+            try {
+                // 使用初始化时最终确定的转换器
+                const s2tResult = opencc.s2tConverter(inputText);
+                if (s2tResult !== inputText) {
+                    convertedText = s2tResult;
+                } else {
+                    convertedText = opencc.t2sConverter(inputText);
+                }
+            } catch (err) {
+                console.error('OpenCC conversion error:', err);
+                showToast('文本转换时出错');
+                convertedText = '[转换错误]';
+            }
+            outputTextElem.textContent = convertedText;
+            copyToClipboard(convertedText, false);
+        }
+
+        // --- 事件监听 ---
+        const debouncedAutoConvert = debounce(autoConvert, 400);
+        inputTextElem.addEventListener('input', debouncedAutoConvert);
+
+        copyButton.addEventListener('click', () => {
+            if (!opencc) return;
+            const plainText = outputTextElem.textContent;
+            copyToClipboard(plainText, true);
+        });
+
+        pasteButton.addEventListener('click', async () => {
+            if (!opencc) return;
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    inputTextElem.value = text;
+                    autoConvert(); // 立即转换
+                    inputTextElem.focus();
+                    showToast('内容已贴入');
+                } else {
+                    showToast('剪贴板为空');
+                }
+            } catch (err) {
+                console.error('Clipboard read failed:', err.message || err);
+                let toastMsg = '贴入失败，请检查权限或手动粘贴';
+                if (err.message && err.message.toLowerCase().includes('permissions policy')) {
+                    toastMsg = '贴入失败：浏览器权限策略限制。';
+                } else if (err.message && err.message.toLowerCase().includes('secure context')) {
+                    toastMsg = '贴入失败：需要安全环境 (https 或 localhost)。';
+                } else if (err.name === 'NotAllowedError') {
+                    toastMsg = '贴入失败：需要剪贴板读取权限。';
+                }
+                showToast(toastMsg);
+            }
+        });
+
+        clearButton.addEventListener('click', () => {
+            inputTextElem.value = '';
+            outputTextElem.textContent = '';
+            inputTextElem.focus();
+        });
+
+        // --- 页面加载后初始化 OpenCC ---
+        disableButtons();
+        document.addEventListener('DOMContentLoaded', initializeOpenCC);
+
+    </script>
+</body>
+
+</html>
